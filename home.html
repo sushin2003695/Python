@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Analysis on Social Media</title>
+    <style>
+        body {
+            background-color: #282c34;
+            color: #ffffff;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        button {
+            background-color: #42f435;
+            border: none;
+            color: #282c34;
+            padding: 15px 32px;
+            text-align: center;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s, color 0.3s;
+            margin: 10px;
+        }
+
+        button:hover {
+            background-color: #06fa0d;
+        }
+
+        video, canvas {
+            margin-top: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #emotion {
+            font-size: 24px;
+            margin-top: 20px;
+            color: #ff6b6b;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        #timer {
+            font-size: 2em;
+            margin: 20px;
+            color: #42f435;
+        }
+
+        #recommendations {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 100px;
+        }
+
+        .post-link {
+            color: #42f435;
+            text-decoration: none;
+            font-size: 20px;
+            margin: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .post-link img {
+            margin-right: 10px;
+            width: 30px;
+            height: 30px;
+        }
+
+        .post-link:hover {
+            text-decoration: underline;
+        }
+
+        select {
+            margin-top: 20px;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #42f435;
+            background-color: #282c34;
+            color: #ffffff;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #42f435;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            display: none;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sentiment Analysis on Social Media</h1>
+    <button id="start-button">Start Camera</button>
+    <video id="camera" width="640" height="480" autoplay class="hidden"></video>
+    <canvas id="canvas" width="640" height="480" class="hidden"></canvas>
+    <div id="timer" class="hidden">3</div>
+    <button id="capture-button" class="hidden">Capture</button>
+    <button id="recapture-button" class="hidden">Recapture</button>
+    <div id="emotion">Emotion detected: None</div>
+    <div class="spinner" id="loading-spinner"></div>
+    <select id="platform-select">
+        <option value="instagram">Instagram</option>
+        <option value="twitter">Twitter</option>
+        <option value="youtube">YouTube</option>
+    </select>
+    <a id="platform-link" class="post-link hidden" target="_blank">
+        <img id="platform-icon" src="" alt="Platform Icon">
+        Go to Selected Platform
+    </a>
+
+    <script>
+        const startButton = document.getElementById('start-button');
+        const video = document.getElementById('camera');
+        const canvas = document.getElementById('canvas');
+        const emotionDiv = document.getElementById('emotion');
+        const timerDiv = document.getElementById('timer');
+        const captureButton = document.getElementById('capture-button');
+        const recaptureButton = document.getElementById('recapture-button');
+        const platformSelect = document.getElementById('platform-select');
+        const platformLink = document.getElementById('platform-link');
+        const platformIcon = document.getElementById('platform-icon');
+        const spinner = document.getElementById('loading-spinner');
+        let countdown;
+
+        startButton.addEventListener('click', async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            video.classList.remove('hidden');
+            captureButton.classList.remove('hidden');
+        });
+
+        captureButton.addEventListener('click', startCountdown);
+
+        recaptureButton.addEventListener('click', resetUI);
+
+        platformSelect.addEventListener('change', () => {
+            updatePlatformLink();
+        });
+
+        function resetUI() {
+            captureButton.classList.remove('hidden');
+            recaptureButton.classList.add('hidden');
+            timerDiv.classList.add('hidden');
+            platformLink.classList.add('hidden');
+            spinner.classList.add('hidden');
+            emotionDiv.innerText = 'Emotion detected: None';
+            platformLink.href = '';
+            platformIcon.src = '';
+        }
+
+        function startCountdown() {
+            let timeLeft = 3;
+            timerDiv.innerText = timeLeft;
+            timerDiv.classList.remove('hidden');
+            captureButton.classList.add('hidden');
+
+            countdown = setInterval(() => {
+                timeLeft--;
+                timerDiv.innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(countdown);
+                    captureImage();
+                }
+            }, 1000);
+        }
+
+        async function captureImage() {
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg');
+            spinner.classList.remove('hidden');
+
+            const response = await fetch('/detect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageData, platform: platformSelect.value }), // Include platform
+            });
+
+            const result = await response.json();
+            emotionDiv.innerText = `Emotion detected: ${result.emotion} (${result.percentage}%)`;
+
+            // Update platform link with the returned post URL
+            if (result.post_url) {
+                window.location.href = result.post_url; // Redirect to the recommended URL
+            } else {
+                platformLink.classList.add('hidden'); // Hide link if no URL is returned
+            }
+
+            spinner.classList.add('hidden');
+            recaptureButton.classList.remove('hidden');
+            timerDiv.classList.add('hidden');
+        }
+
+        function updatePlatformLink() {
+            const selectedPlatform = platformSelect.value;
+            const platformIcons = {
+                instagram: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png',
+                twitter: 'https://upload.wikimedia.org/wikipedia/en/6/60/Twitter_Logo_as_of_2021.svg',
+                youtube: 'https://upload.wikimedia.org/wikipedia/commons/b/b8/YouTube_Logo_2017.svg'
+            };
+
+            platformIcon.src = platformIcons[selectedPlatform];
+            platformLink.classList.remove('hidden'); // Always show link for platform selection
+            platformLink.innerText = `Go to ${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)}`;
+        }
+    </script>
+</body>
+</html>
